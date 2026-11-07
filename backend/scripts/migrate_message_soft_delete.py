@@ -12,6 +12,16 @@
 新列有默认值，旧版本 ORM 不映射它，读写都不受影响。
 
 重复执行安全：加列前查 ``information_schema``，已存在则跳过。
+
+**生产库注意**：``.env`` 里的 ``lawfirm_app`` 账号只有 DML 权限（SELECT/INSERT/
+UPDATE/DELETE），没有 ALTER，本脚本在生产会报 ``command denied``。
+生产环境请用 root 直接执行 SQL 文件，或临时用 root 的 DSN 覆盖：
+
+    # 先看有没有这列（空输出=还没加）
+    mysql law_firm -e "SELECT COLUMN_NAME FROM information_schema.COLUMNS \\
+      WHERE TABLE_SCHEMA='law_firm' AND TABLE_NAME='message' AND COLUMN_NAME='is_deleted';"
+    # 再加
+    mysql law_firm < /opt/law-firm-cms/db/migrations/2026-11-07_message_soft_delete.sql
 """
 
 import asyncio
