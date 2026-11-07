@@ -84,6 +84,7 @@
                 :show-meta="item.showMeta"
                 :peer-name="lawyerName"
                 @preview="openPreview"
+                @delete="handleDelete"
               />
             </template>
           </div>
@@ -112,9 +113,10 @@ import {
   ref,
 } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ChatDotRound, Lock, Refresh, Select } from '@element-plus/icons-vue'
 import {
+  deleteMessage,
   listConversations,
   listMyMessages,
   markMyAllRead,
@@ -279,6 +281,38 @@ async function handleSend({ content, files }) {
 function openPreview(att) {
   previewAtt.value = att
   viewerVisible.value = true
+}
+
+// 撤回自己 5 分钟内的留言：后端做最终校验，前端只负责确认与就地替换气泡
+async function handleDelete(msg) {
+  if (msg.is_deleted) return
+  const action = msg.recallable ? '撤回' : '删除'
+  try {
+    await ElMessageBox.confirm(
+      msg.recallable
+        ? '撤回后对方会看到「该留言已撤回」，内容与附件不再显示。确定撤回？'
+        : '删除后不可恢复，确定删除这条留言？',
+      `${action}留言`,
+      {
+        type: 'warning',
+        confirmButtonText: action,
+        cancelButtonText: '取消',
+        confirmButtonClass: 'el-button--danger',
+      },
+    )
+  } catch {
+    return
+  }
+
+  try {
+    const updated = await deleteMessage(msg.id)
+    const idx = messages.value.findIndex((m) => m.id === updated.id)
+    if (idx >= 0) messages.value[idx] = updated
+    ElMessage.success(`已${action}`)
+    await loadConversations()
+  } catch {
+    // 错误提示由请求拦截器统一弹出（超时撤回会返回 400 并提示原因）
+  }
 }
 
 let pollTimer = null

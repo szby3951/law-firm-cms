@@ -182,6 +182,34 @@ async def mark_read(message_id: int, db: DbSession, user: CurrentUser) -> Messag
     return MessageOut.model_validate(msg)
 
 
+@router.delete("/{message_id}", response_model=MessageOut, summary="撤回 / 删除留言")
+async def delete_message(
+    message_id: int, request: Request, db: DbSession, user: CurrentUser
+) -> MessageOut:
+    """撤回或删除一条留言（软删除）。
+
+    - 发送人本人：只能撤回自己发出的、5 分钟内的留言；
+    - 管理员：可删除任意留言（违规内容 / 质检清理），不受时间限制。
+
+    返回删除后的留言占位（``is_deleted=true`` + ``placeholder`` 文案），
+    前端直接用它替换原气泡，无需整段重新拉取。
+    """
+    msg = await message_service.delete_message(db, message_id, user)
+    is_admin_remove = msg.delete_kind == "admin"
+    await audit_service.write_log_safe(
+        db,
+        user_id=user.id,
+        action=audit_service.ACTION_DELETE,
+        target=f"message:{message_id}",
+        detail=(
+            f"{'管理员删除' if is_admin_remove else '发送人撤回'}留言"
+            f"（客户 #{msg.client_id}）"
+        ),
+        ip=client_ip(request),
+    )
+    return MessageOut.model_validate(msg)
+
+
 @router.get(
     "/{message_id}/attachments",
     response_model=list[AttachmentOut],

@@ -13,35 +13,50 @@
         <span v-if="unread && !mine" class="unread-chip">未读</span>
       </div>
 
-      <div class="bubble" :class="{ 'is-unread': unread && !mine }">
-        <div v-if="message.content" class="text">{{ message.content }}</div>
+      <div
+        class="bubble"
+        :class="{ 'is-unread': unread && !mine, 'is-deleted': message.is_deleted }"
+      >
+        <span v-if="message.is_deleted" class="placeholder">
+          {{ message.placeholder || '该留言已撤回' }}
+        </span>
 
-        <div v-if="message.attachments?.length" class="atts">
-          <button
-            v-for="att in message.attachments"
-            :key="att.id"
-            type="button"
-            class="att"
-            :title="isPreviewable(att) ? '点击预览' : '点击预览 / 下载'"
-            @click="emit('preview', att)"
-          >
-            <span
-              class="att-icon"
-              :style="{ background: attachmentMeta(att).bg, color: attachmentMeta(att).color }"
+        <template v-else>
+          <div v-if="message.content" class="text">{{ message.content }}</div>
+
+          <div v-if="message.attachments?.length" class="atts">
+            <button
+              v-for="att in message.attachments"
+              :key="att.id"
+              type="button"
+              class="att"
+              :title="isPreviewable(att) ? '点击预览' : '点击预览 / 下载'"
+              @click="emit('preview', att)"
             >
-              <el-icon :size="14"><component :is="attachmentMeta(att).icon" /></el-icon>
-            </span>
-            <span class="att-info">
-              <span class="att-name">{{ att.file_name }}</span>
-              <span class="att-size">
-                {{ attachmentMeta(att).label }} · {{ fmtFileSize(att.file_size) }}
+              <span
+                class="att-icon"
+                :style="{ background: attachmentMeta(att).bg, color: attachmentMeta(att).color }"
+              >
+                <el-icon :size="14"><component :is="attachmentMeta(att).icon" /></el-icon>
               </span>
-            </span>
-          </button>
-        </div>
+              <span class="att-info">
+                <span class="att-name">{{ att.file_name }}</span>
+                <span class="att-size">
+                  {{ attachmentMeta(att).label }} · {{ fmtFileSize(att.file_size) }}
+                </span>
+              </span>
+            </button>
+          </div>
+        </template>
       </div>
 
-      <div v-if="showReadState && mine" class="foot">
+      <div v-if="showActions" class="actions">
+        <button type="button" class="act" @click="emit('delete', message)">
+          {{ message.recallable ? '撤回' : '删除' }}
+        </button>
+      </div>
+
+      <div v-if="showReadState && mine && !message.is_deleted" class="foot">
         <span class="read-state" :class="{ read: message.is_read }">
           {{ message.is_read ? '对方已读' : '对方未读' }}
         </span>
@@ -71,9 +86,18 @@ const props = defineProps({
   // 对方发来且尚未读：气泡描边高亮 + 未读角标
   unread: { type: Boolean, default: false },
   peerName: { type: String, default: '' },
+  // 管理员视角：可删除任意留言（撤回入口由 message.recallable 决定）
+  canDelete: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['preview'])
+const emit = defineEmits(['preview', 'delete'])
+
+// 悬浮按钮：本人 5 分钟内的留言显示「撤回」，管理员对任意未删除留言显示「删除」
+const showActions = computed(() => {
+  if (props.message.is_deleted) return false
+  if (props.message.recallable) return true
+  return props.canDelete
+})
 
 const senderName = computed(() => {
   if (props.mine) return props.message.sender_name || '我'
@@ -185,6 +209,56 @@ const timeText = computed(() => timeOf(props.message.created_at) || '')
   border-color: #e6d4ac;
   background: #fffdf8;
   box-shadow: 0 1px 4px rgba(201, 165, 92, 0.14);
+}
+
+/* 已撤回/删除：虚线灰底，让对方一眼看出这里原本有条消息 */
+.bubble.is-deleted {
+  background: #fafbfd;
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.mine .bubble.is-deleted {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.placeholder {
+  font-size: 12px;
+  letter-spacing: 0.2px;
+}
+
+/* 悬浮操作：平时隐藏，鼠标移入气泡行才出现，避免干扰阅读 */
+.actions {
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 4px;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.chat-msg:hover .actions,
+.actions:focus-within {
+  opacity: 1;
+}
+
+.act {
+  border: none;
+  background: transparent;
+  color: var(--brand-muted);
+  font-size: 12px;
+  line-height: 18px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.act:hover {
+  color: var(--el-color-danger);
+  background: rgba(245, 108, 108, 0.08);
 }
 
 .bubble {

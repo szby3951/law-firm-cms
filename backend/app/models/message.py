@@ -56,6 +56,21 @@ class Message(Base):
         server_default=text("0"),
         comment="对方是否已读",
     )
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("0"),
+        comment="是否已撤回/删除（软删除，正文与附件不再下发）",
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, comment="撤回/删除时间"
+    )
+    deleted_by: Mapped[int | None] = mapped_column(
+        BigIntPK,
+        nullable=True,
+        comment="操作人：发送人本人=撤回，管理员=后台删除",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), comment="发送时间"
     )
@@ -68,6 +83,10 @@ class Message(Base):
     case_no = None
     attachments = None
     is_mine = False
+    # 是否还在撤回窗口内（本人 5 分钟内），用于前端决定是否显示「撤回」
+    recallable = False
+    # 删除性质：recall（本人撤回）/ admin（管理员删除），软删除后前端据此选文案
+    delete_kind = None
 
     def __repr__(self) -> str:  # pragma: no cover - 调试用
         return (

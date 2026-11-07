@@ -6,7 +6,14 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from app.schemas.case import AttachmentOut
 
@@ -15,6 +22,12 @@ SENDER_ROLES = ("client", "lawyer")
 SENDER_ROLE_LABELS = {
     "client": "客户",
     "lawyer": "律师",
+}
+
+# 软删除后的占位文案：撤回与后台删除要能区分，对方才知道发生了什么
+DELETE_KIND_TEXT = {
+    "recall": "该留言已撤回",
+    "admin": "该留言已被管理员删除",
 }
 
 # 单条留言正文上限：聊天场景足够，也避免误贴整篇文书
@@ -76,6 +89,35 @@ class MessageOut(BaseModel):
     case_no: str | None = None
     is_mine: bool = False
     attachments: list[AttachmentOut] = Field(default_factory=list)
+
+    # ---------- 软删除（撤回 / 管理员删除） ----------
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
+    # recall = 发送人自己撤回；admin = 管理员后台删除
+    delete_kind: str | None = None
+    # 还在撤回窗口内且是本人发的：前端据此显示「撤回」入口
+    recallable: bool = False
+
+    @model_validator(mode="after")
+    def _mask_deleted(self) -> "MessageOut":
+        """已撤回/删除的留言只下发占位信息。
+
+        正文与附件在库里仍然保留（便于审计与误删恢复），但**绝不能再下发给
+        会话双方**——否则「撤回」就只是前端把字藏起来，对方刷新接口照样能读到。
+        """
+        if self.is_deleted:
+            self.content = None
+            self.attachments = []
+            self.recallable = False
+        return self
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def placeholder(self) -> str | None:
+        """软删除后展示的占位文案，未删除时为 None。"""
+        if not self.is_deleted:
+            return None
+        return DELETE_KIND_TEXT.get(self.delete_kind or "recall", DELETE_KIND_TEXT["recall"])
 
     @computed_field  # type: ignore[prop-decorator]
     @property

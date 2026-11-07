@@ -37,6 +37,11 @@ export function markAllRead() {
   return request.patch('/messages/read-all')
 }
 
+// 撤回 / 删除留言：发送人本人在 5 分钟内撤回，管理员可删除任意一条
+export function deleteMessage(id) {
+  return request.delete(`/messages/${id}`)
+}
+
 // ---------------- 附件 ----------------
 
 export function listMessageAttachments(messageId) {

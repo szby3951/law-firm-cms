@@ -15,6 +15,8 @@
 - 管理员：可查看、回复全部会话（用于兜底接待与质检）。
 """
 
+from datetime import datetime, timedelta
+
 from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +29,7 @@ from app.models.message import Message
 from app.models.user import User
 from app.schemas.case import AttachmentOut
 from app.schemas.message import (
+    DELETE_KIND_TEXT,
     ConversationListOut,
     ConversationOut,
     MessageCreate,
@@ -36,6 +39,10 @@ from app.schemas.message import (
 
 # 会话列表里最后一条消息的摘要长度
 EXCERPT_LENGTH = 60
+
+# 发送人本人撤回的时间窗口（分钟）。超过之后只能由管理员在后台删除，
+# 与微信「2 分钟内撤回」同理：给手滑留余地，又不让人随意改写历史记录。
+RECALL_WINDOW_MINUTES = 5
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +194,8 @@ async def _decorate(
     if not msgs:
         return msgs
 
+    now = datetime.now()
+
     client_ids = {m.client_id for m in msgs if m.client_id}
     lawyer_ids = {m.lawyer_id for m in msgs if m.lawyer_id}
     sender_ids = {m.sender_id for m in msgs if m.sender_id}
@@ -240,6 +249,17 @@ async def _decorate(
         )
         m.attachments = atts_by_msg.get(m.id, [])
         m.is_mine = m.sender_id == current.id
+        # 撤回窗口只对「本人发的、未删除的」消息开放；管理员删除走另一条路径
+        m.recallable = bool(
+            not m.is_deleted
+            and m.is_mine
+            and m.created_at is not None
+            and now - m.created_at <= timedelta(minutes=RECALL_WINDOW_MINUTES)
+        )
+        m.delete_kind = None
+        if m.is_deleted:
+            # deleted_by 等于发送人 → 本人撤回；否则是管理员在后台删除
+            m.delete_kind = "recall" if m.deleted_by == m.sender_id else "admin"
     return msgs
 
 
@@ -391,10 +411,15 @@ async def list_conversations(
     await _decorate(db, list(last_msgs), current)
     last_by_id = {m.id: m for m in last_msgs}
 
-    # 2) 每个会话的未读条数（只算对方发来的）
+    # 2) 每个会话的未读条数（只算对方发来的、未撤回的）
     unread_rows = await db.execute(
         select(key_col.label("peer_id"), func.count())
-        .where(*conds, Message.sender_role == my_role, Message.is_read.is_(False))
+        .where(
+            *conds,
+            Message.sender_role == my_role,
+            Message.is_read.is_(False),
+            Message.is_deleted.is_(False),
+        )
         .group_by(key_col)
     )
     unread_map = {int(k): int(c) for k, c in unread_rows.all()}
@@ -412,7 +437,11 @@ async def list_conversations(
                 lawyer_id=last.lawyer_id,
                 lawyer_name=last.lawyer_name,
                 case_no=last.case_no,
-                last_content=_excerpt(last.content),
+                last_content=(
+                    DELETE_KIND_TEXT.get(last.delete_kind or "recall")
+                    if last.is_deleted
+                    else _excerpt(last.content)
+                ),
                 last_sender_role=last.sender_role,
                 last_at=last.created_at,
                 unread=unread_map.get(peer_id, 0) if peer_id is not None else 0,
@@ -469,6 +498,7 @@ async def list_messages(
                 *conds,
                 Message.sender_role == other_role,
                 Message.is_read.is_(False),
+                Message.is_deleted.is_(False),
             )
         )
         or 0
@@ -515,8 +545,9 @@ async def mark_read(db: AsyncSession, message_id: int, current: User) -> Message
     msg = await _get_message_or_404(db, message_id)
     await _assert_participant(db, msg, current)
 
-    # 自己发的消息已读状态无意义，直接原样返回，保证接口幂等
-    if msg.sender_id != current.id and not msg.is_read:
+    # 自己发的消息已读状态无意义，直接原样返回，保证接口幂等；
+    # 已撤回/删除的留言同样不再改状态
+    if msg.sender_id != current.id and not msg.is_read and not msg.is_deleted:
         msg.is_read = True
         await db.commit()
         await db.refresh(msg)
@@ -559,7 +590,11 @@ async def mark_conversation_read(
             Message.is_read.is_(False),
         ]
 
-    result = await db.execute(update(Message).where(*conds).values(is_read=True))
+    result = await db.execute(
+        update(Message)
+        .where(*conds, Message.is_deleted.is_(False))
+        .values(is_read=True)
+    )
     await db.commit()
     return int(result.rowcount or 0)
 
@@ -582,7 +617,11 @@ async def mark_all_read(db: AsyncSession, current: User) -> int:
     else:
         conds = [Message.sender_role == "client", Message.is_read.is_(False)]
 
-    result = await db.execute(update(Message).where(*conds).values(is_read=True))
+    result = await db.execute(
+        update(Message)
+        .where(*conds, Message.is_deleted.is_(False))
+        .values(is_read=True)
+    )
     await db.commit()
     return int(result.rowcount or 0)
 
@@ -605,8 +644,55 @@ async def count_unread(db: AsyncSession, current: User) -> int:
     else:
         conds = [Message.sender_role == "client", Message.is_read.is_(False)]
 
-    value = await db.scalar(select(func.count()).where(*conds))
+    value = await db.scalar(
+        select(func.count()).where(*conds, Message.is_deleted.is_(False))
+    )
     return int(value or 0)
+
+
+# ---------------------------------------------------------------------------
+# 8.1.3 撤回 / 删除
+# ---------------------------------------------------------------------------
+
+
+async def delete_message(db: AsyncSession, message_id: int, current: User) -> Message:
+    """撤回或删除一条留言（软删除）。
+
+    两条路径：
+
+    - **本人撤回**：只能撤回自己发出的、且不超过 ``RECALL_WINDOW_MINUTES``
+      分钟的留言；给手滑留余地，又不让人随意改写历史；
+    - **管理员删除**：管理员可删除任意留言（违规内容、质检清理），不受时间限制。
+
+    两条路径都只置 ``is_deleted``，正文与附件**留在库里备查**（审计需要）。
+    对方刷新会话会看到「该留言已撤回 / 已被管理员删除」的占位，
+    而不是记录凭空消失——否则对方会以为是自己漏看了。
+    """
+    msg = await _get_message_or_404(db, message_id)
+    if msg.is_deleted:
+        raise BadRequest("该留言已撤回或删除，无需重复操作")
+
+    if current.role != "admin":
+        await _assert_participant(db, msg, current)
+        if msg.sender_id != current.id:
+            # 非管理员只能撤回自己的留言；删别人的活留给管理员
+            raise Forbidden("只能撤回自己发送的留言")
+        if (
+            msg.created_at is None
+            or datetime.now() - msg.created_at
+            > timedelta(minutes=RECALL_WINDOW_MINUTES)
+        ):
+            raise BadRequest(
+                f"超过 {RECALL_WINDOW_MINUTES} 分钟的留言不能撤回，可联系管理员处理"
+            )
+
+    msg.is_deleted = True
+    msg.deleted_at = datetime.now().replace(microsecond=0)
+    msg.deleted_by = current.id
+    await db.commit()
+    await db.refresh(msg)
+    await _decorate(db, [msg], current)
+    return msg
 
 
 # ---------------------------------------------------------------------------
@@ -627,6 +713,8 @@ async def save_attachment(
     """登记一张挂在留言上的附件（物理文件由路由层落盘）。"""
     msg = await _get_message_or_404(db, message_id)
     await _assert_participant(db, msg, current)
+    if msg.is_deleted:
+        raise BadRequest("该留言已撤回，无法继续上传附件")
 
     att = Attachment(
         biz_type="message",
@@ -654,6 +742,9 @@ async def get_attachment(
     if msg is None:
         raise NotFound("附件所属留言已删除")
     await _assert_participant(db, msg, current)
+    # 留言撤回后附件随之下线：否则「撤回」只是把文字藏了，文件还能直接下
+    if msg.is_deleted and current.role != "admin":
+        raise NotFound("留言已撤回，附件不可访问")
     return att
 
 
@@ -663,6 +754,8 @@ async def list_message_attachments(
     """某条留言的附件列表。"""
     msg = await _get_message_or_404(db, message_id)
     await _assert_participant(db, msg, current)
+    if msg.is_deleted:
+        return []
     rows = await db.execute(
         select(Attachment)
         .where(Attachment.biz_type == "message", Attachment.biz_id == message_id)

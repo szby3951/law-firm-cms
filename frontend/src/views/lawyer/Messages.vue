@@ -154,8 +154,10 @@
                   :show-meta="item.showMeta"
                   :unread="!item.message.is_read && item.message.sender_role === 'client'"
                   :peer-name="header.client_name"
+                  :can-delete="isAdmin"
                   show-read-state
                   @preview="openPreview"
+                  @delete="handleDelete"
                 />
               </template>
             </div>
@@ -193,9 +195,10 @@ import {
   watch,
 } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search, Select, User } from '@element-plus/icons-vue'
 import {
+  deleteMessage,
   listConversations,
   listMessages,
   markAllRead,
@@ -203,6 +206,7 @@ import {
   sendMessage,
   uploadMessageAttachment,
 } from '@/api/messages'
+import { useUserStore } from '@/stores/user'
 import { dateKey, isSameDay, relativeTime } from '@/utils/schedule'
 import { dayLabel, initials } from '@/utils/message'
 import ChatMessage from '@/components/ChatMessage.vue'
@@ -213,6 +217,10 @@ const route = useRoute()
 const router = useRouter()
 
 const base = computed(() => (route.path.startsWith('/admin') ? '/admin' : '/lawyer'))
+
+// 管理员在律师端同一套界面里可以删除任意留言（律师只能撤回自己的）
+const userStore = useUserStore()
+const isAdmin = computed(() => userStore.role === 'admin')
 
 const conversations = ref([])
 const unreadTotal = ref(0)
@@ -436,6 +444,38 @@ function goClient() {
 function openPreview(att) {
   previewAtt.value = att
   viewerVisible.value = true
+}
+
+// 撤回（本人 5 分钟内）或管理员删除：后端做权限与时间窗口的最终校验
+async function handleDelete(msg) {
+  if (msg.is_deleted) return
+  const action = msg.recallable ? '撤回' : '删除'
+  try {
+    await ElMessageBox.confirm(
+      msg.recallable
+        ? '撤回后客户会看到「该留言已撤回」，内容与附件不再显示。确定撤回？'
+        : '删除后客户将看到「该留言已被管理员删除」。确定删除？',
+      `${action}留言`,
+      {
+        type: 'warning',
+        confirmButtonText: action,
+        cancelButtonText: '取消',
+        confirmButtonClass: 'el-button--danger',
+      },
+    )
+  } catch {
+    return
+  }
+
+  try {
+    const updated = await deleteMessage(msg.id)
+    const idx = messages.value.findIndex((m) => m.id === updated.id)
+    if (idx >= 0) messages.value[idx] = updated
+    ElMessage.success(`已${action}`)
+    await loadMessages()
+  } catch {
+    // 错误提示由请求拦截器统一弹出（超过 5 分钟会返回 400 并说明原因）
+  }
 }
 
 let kwTimer = null
