@@ -14,7 +14,8 @@
 #   WEB_USER  远端属主，默认 www-data
 #   SSH_PORT  SSH 端口，默认 22
 #   SKIP_BUILD=1  跳过 npm run build（dist 已经是新的时候用）
-#   KEEP_BAK=1    保留上一版 dist.bak（默认也会保留，设为 0 则删除）
+#
+# 每次都会保留上一版到 <TARGET>.bak，回滚命令脚本结束时会打印。
 #
 set -euo pipefail
 
@@ -59,14 +60,10 @@ echo "==> 产物：$FILE_COUNT 个文件，$DIST_SIZE"
 # 兜底检查：入口 HTML 必须引用 assets，否则说明构建不完整
 grep -q "assets/" "$DIST_DIR/index.html" || die "index.html 未引用 assets，构建结果异常"
 
-# ---------- 2. 连通性 ----------
-echo "==> 检查 SSH：$SERVER"
-ssh "${SSH_OPTS[@]}" -o BatchMode=yes "$SERVER" "echo ok" >/dev/null 2>&1 \
-  || die "SSH 连不上（需要免密登录）。先在终端跑一次 ssh $SERVER 确认能进，或配好密钥"
-
-# ---------- 3. 上传并原子切换 ----------
+# ---------- 2. 上传、切换、验证（一次连接完成）----------
+# 全程只要求输一次 SSH 密码：探活、上传、切换、reload、探活首页都在同一条 ssh 会话里。
 # 先解到同级 dist.new，再 mv 替换：mv 同分区是原子的，nginx 不会出现 404 空窗。
-# 目录内逐个覆盖（tar --delete / rm + 解包）会在清空瞬间让线上 404，故不用那种做法。
+# 不用「清空目录再解包」，那会在清空瞬间让线上 404。
 echo "==> 上传并切换（目标 $TARGET）"
 tar -czf - -C "$DIST_DIR" . | ssh "${SSH_OPTS[@]}" "$SERVER" "
   set -e
@@ -75,26 +72,20 @@ tar -czf - -C "$DIST_DIR" . | ssh "${SSH_OPTS[@]}" "$SERVER" "
   mkdir -p \"\$NEW\"
   tar -xzf - -C \"\$NEW\"
   chown -R '$WEB_USER:$WEB_USER' \"\$NEW\"
-  if [ -d '$TARGET' ]; then
-    rm -rf '$TARGET.bak'
-    mv '$TARGET' '$TARGET.bak'
-  fi
+  rm -rf '$TARGET.bak'
+  if [ -d '$TARGET' ]; then mv '$TARGET' '$TARGET.bak'; fi
   mv \"\$NEW\" '$TARGET'
   echo \"  - 已部署 \$(find '$TARGET' -type f | wc -l) 个文件\"
-  nginx -t
+  if ! nginx -t >/dev/null 2>&1; then nginx -t; exit 1; fi
   systemctl reload nginx
   echo '  - nginx 已重载'
+  CODE=\$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/ </dev/null || echo 000)
+  echo \"  - 首页 HTTP \$CODE\"
+  if [ \"\$CODE\" != '200' ]; then
+    echo \"  ! 首页返回 \$CODE，检查 nginx 配置与 dist 目录权限\" >&2
+    exit 1
+  fi
 "
-
-# ---------- 4. 验证 ----------
-echo "==> 验证"
-CODE=$(ssh "${SSH_OPTS[@]}" "$SERVER" \
-  "curl -s -o /dev/null -w '%{http_code}' -H 'Host: localhost' http://127.0.0.1/" || echo "000")
-if [ "$CODE" = "200" ]; then
-  echo "  - 首页 HTTP 200"
-else
-  echo "  ! 首页返回 $CODE，请检查 nginx 与 $TARGET 权限" >&2
-fi
 
 echo
 echo "完成。回滚上一版："
