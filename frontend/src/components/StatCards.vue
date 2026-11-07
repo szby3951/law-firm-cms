@@ -164,4 +164,24 @@ function toneOf(tone) {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* 手机：两列，缩小数值字号，长金额（¥12,345.67）才不会被截断 */
+@media (max-width: 768px) {
+  .stat-value {
+    margin-top: 8px;
+  }
+
+  .num {
+    font-size: 20px;
+    letter-spacing: -0.2px;
+  }
+
+  .unit {
+    font-size: 11px;
+  }
+
+  .stat-hint {
+    font-size: 10px;
+  }
+}
 </style>

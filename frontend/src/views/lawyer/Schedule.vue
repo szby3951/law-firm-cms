@@ -1184,4 +1184,117 @@ onMounted(() => {
   font-size: 12px;
   color: var(--el-color-danger);
 }
+
+/* ============================================================
+   手机端（≤768px）
+   月历 / 周历都是 7 列布局，窄屏必须换一种表达方式：
+   月视图保留七列但把事件压成色条，周视图改为横向滑动的列。
+   ============================================================ */
+@media (max-width: 768px) {
+  /* 右栏固定 330px，在 375px 屏幕上会把日历列挤成 0 宽，改为上下堆叠 */
+  .body,
+  .body.wide {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  /* ---------- 统计卡：四张卡两列正好，三等分会把第四张挤到单独一行 ---------- */
+  .stat-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .stat-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 10px 10px 12px;
+    border-radius: 10px;
+  }
+
+  .stat-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+  }
+
+  .stat-value {
+    font-size: 17px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    margin-top: 2px;
+    white-space: nowrap;
+  }
+
+  /* ---------- 工具条 ---------- */
+  .toolbar {
+    gap: 8px;
+  }
+
+  .period-text {
+    min-width: 0;
+    font-size: 14px;
+    letter-spacing: 0;
+  }
+
+  /* ---------- 月视图：格子压到 64px，事件只留色条 ---------- */
+  .weekday {
+    font-size: 11px;
+    letter-spacing: 0;
+  }
+
+  .month-grid {
+    gap: 2px;
+  }
+
+  .day-cell {
+    min-height: 64px;
+    padding: 3px 2px;
+    border-radius: 6px;
+  }
+
+  .day-num {
+    font-size: 12px;
+  }
+
+  .day-events {
+    gap: 2px;
+  }
+
+  /* 46px 宽的格子里塞不下"09:30 开庭"，压成一条色带，点进日视图看详情 */
+  .event-chip {
+    height: 5px;
+    padding: 0;
+    border-left-width: 0;
+    border-radius: 2px;
+    filter: saturate(2.2);
+  }
+
+  .chip-time,
+  .chip-title {
+    display: none;
+  }
+
+  .more-text {
+    font-size: 10px;
+    padding-left: 0;
+    text-align: right;
+  }
+
+  /* ---------- 周视图：七列并排挤不下，改成横向滑动 ---------- */
+  .week-view {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 6px;
+  }
+
+  .week-col {
+    flex: 0 0 132px;
+    min-height: 300px;
+  }
+}
 </style>

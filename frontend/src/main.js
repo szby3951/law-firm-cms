@@ -8,6 +8,8 @@ import App from './App.vue'
 import router from './router'
 import pinia from './stores'
 import './style.css'
+// 手机端适配：只含 ≤768px 的媒体查询，桌面不受影响
+import './styles/mobile.css'
 // AI 回答正文的排版：法律问答与「AI督办」共用，保证两边读起来是同一个产品
 import './styles/ai-markdown.css'
 

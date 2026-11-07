@@ -69,6 +69,7 @@ import { ArrowRight, Close, MagicStick, Plus } from '@element-plus/icons-vue'
 import AiChatWindow from '@/components/AiChatWindow.vue'
 import { useAiAssistantStore } from '@/stores/aiAssistant'
 import { useUserStore } from '@/stores/user'
+import { useBreakpoint } from '@/utils/useBreakpoint'
 
 const store = useAiAssistantStore()
 const userStore = useUserStore()
@@ -86,8 +87,20 @@ const onAiPage = computed(() =>
     route.name,
   ),
 )
+
+// 手机上的留言页底部有输入框和发送按钮，悬浮球正好压在上面；
+// 而对话场景本来也不适合再叠一个 AI 窗，窄屏时直接不显示。
+const { isMobile } = useBreakpoint()
+const conflictWithMobileComposer = computed(
+  () => isMobile.value && /(^|\/)(messages)$/.test(route.path),
+)
+
 const enabled = computed(
-  () => userStore.isLoggedIn && !route.meta.public && !onAiPage.value,
+  () =>
+    userStore.isLoggedIn &&
+    !route.meta.public &&
+    !onAiPage.value &&
+    !conflictWithMobileComposer.value,
 )
 
 const drawerSize = computed(() => (windowWidth.value < 720 ? '100%' : '480px'))
@@ -275,5 +288,21 @@ onBeforeUnmount(() => {
 
 .ai-drawer {
   box-shadow: -8px 0 28px rgba(13, 23, 48, 0.12);
+}
+
+/* ---------- 手机端：悬浮球缩小并贴边，展开态交给抽屉（已按 100% 宽处理） ---------- */
+@media (max-width: 768px) {
+  .fab {
+    right: 14px;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    height: 46px;
+    width: 46px;
+    border-radius: 23px;
+  }
+
+  .fab:hover {
+    width: 46px;
+    transform: none;
+  }
 }
 </style>

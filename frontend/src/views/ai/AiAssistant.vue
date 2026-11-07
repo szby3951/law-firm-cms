@@ -33,11 +33,11 @@
 
         <div class="head-actions">
           <el-button size="small" plain @click="goBusiness">
-            <el-icon><DataLine /></el-icon>AI 督办
+            <el-icon><DataLine /></el-icon><span class="btn-text">AI 督办</span>
           </el-button>
           <el-dropdown trigger="click" @command="goScene">
             <el-button size="small" plain>
-              <el-icon><Grid /></el-icon>场景直达
+              <el-icon><Grid /></el-icon><span class="btn-text">场景直达</span>
               <el-icon class="caret"><ArrowDown /></el-icon>
             </el-button>
             <template #dropdown>
@@ -56,7 +56,7 @@
           </el-dropdown>
 
           <el-button size="small" @click="onNew">
-            <el-icon><Plus /></el-icon>新对话
+            <el-icon><Plus /></el-icon><span class="btn-text">新对话</span>
           </el-button>
         </div>
       </header>
@@ -339,6 +339,57 @@ if (route.query.session) {
 @media (max-width: 900px) {
   .side-panel {
     display: none;
+  }
+}
+
+/* ---------- 手机端：侧栏已在 900px 隐藏，这里压缩高度与空态场景卡 ---------- */
+@media (max-width: 768px) {
+  .ai-page {
+    height: calc(100vh - 128px);
+    min-height: 420px;
+    gap: 0;
+  }
+
+  .chat-head {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  /* 副标题在窄屏会把标题挤成竖排，直接省掉 */
+  .head-sub {
+    display: none;
+  }
+
+  .head-icon {
+    display: none;
+  }
+
+  .head-left {
+    gap: 0;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .head-title {
+    font-size: 15px;
+    white-space: nowrap;
+  }
+
+  /* 三个按钮只留图标，避免占满整行 */
+  .btn-text {
+    display: none;
+  }
+
+  .head-actions {
+    gap: 4px;
+  }
+
+  .head-actions .el-button {
+    padding: 8px;
+  }
+
+  .scene-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

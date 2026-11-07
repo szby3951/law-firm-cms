@@ -566,4 +566,24 @@ onMounted(() => {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ---------- 手机端：筛选栏竖排占满整行，避免输入框被压成一条 ---------- */
+@media (max-width: 768px) {
+  .filter-bar {
+    gap: 8px;
+  }
+
+  .filter-bar .kw,
+  .filter-bar .sel,
+  .filter-bar .el-select,
+  .filter-bar .el-date-editor,
+  .filter-bar .client-filter {
+    width: 100% !important;
+    max-width: none;
+  }
+
+  .spacer {
+    display: none;
+  }
+}
 </style>

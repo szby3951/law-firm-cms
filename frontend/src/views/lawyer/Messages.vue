@@ -35,7 +35,8 @@
         </div>
       </template>
 
-      <div class="chat-body">
+      <!-- 手机端靠 is-chatting 在「会话列表」和「对话」之间切换，避免 312px 侧栏挤爆屏幕 -->
+      <div class="chat-body" :class="{ 'is-chatting': !!activeId }">
         <!-- 左：会话列表 -->
         <aside class="conv-panel">
           <div class="conv-tools">
@@ -103,6 +104,15 @@
         <!-- 右：聊天窗口 -->
         <section v-if="activeId" class="chat-panel">
           <header class="chat-head">
+            <button
+              v-if="isMobile"
+              type="button"
+              class="back-btn"
+              aria-label="返回会话列表"
+              @click="backToList"
+            >
+              <el-icon :size="18"><ArrowLeft /></el-icon>
+            </button>
             <div class="avatar-lg">{{ initials(header.client_name) }}</div>
             <div class="chat-title">
               <div class="line1">
@@ -196,7 +206,7 @@ import {
 } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Search, Select, User } from '@element-plus/icons-vue'
+import { ArrowLeft, Refresh, Search, Select, User } from '@element-plus/icons-vue'
 import {
   deleteMessage,
   listConversations,
@@ -207,6 +217,7 @@ import {
   uploadMessageAttachment,
 } from '@/api/messages'
 import { useUserStore } from '@/stores/user'
+import { useBreakpoint } from '@/utils/useBreakpoint'
 import { dateKey, isSameDay, relativeTime } from '@/utils/schedule'
 import { dayLabel, initials } from '@/utils/message'
 import ChatMessage from '@/components/ChatMessage.vue'
@@ -225,6 +236,11 @@ const isAdmin = computed(() => userStore.role === 'admin')
 const conversations = ref([])
 const unreadTotal = ref(0)
 const activeId = ref(null)
+// 手机端：对话与列表是同一屏的两个状态，返回时清空选中即可
+const { isMobile } = useBreakpoint()
+function backToList() {
+  activeId.value = null
+}
 const messages = ref([])
 const keyword = ref('')
 const filter = ref('all')
@@ -894,6 +910,105 @@ onBeforeUnmount(() => {
 
   .chat-body {
     grid-template-columns: 264px 1fr;
+  }
+}
+
+/* ---------- 手机端：列表与对话二选一全屏显示 ---------- */
+@media (max-width: 768px) {
+  /* 四个统计卡在手机上占掉近 200px，信息在卡片头部已有汇总，这里收掉 */
+  .stat-row {
+    display: none;
+  }
+
+  .card-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .head-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .head-left > span:first-child {
+    white-space: nowrap;
+    font-size: 15px;
+  }
+
+  .head-actions {
+    width: 100%;
+  }
+
+  .head-actions .el-button {
+    flex: 1;
+    margin-left: 0;
+  }
+
+  .chat-body {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+
+  .conv-panel {
+    border-right: none;
+  }
+
+  /* 未选会话：只显示列表；已选会话：只显示对话 */
+  .chat-body:not(.is-chatting) .chat-panel {
+    display: none;
+  }
+
+  .chat-body.is-chatting .conv-panel {
+    display: none;
+  }
+
+  /* 顶栏 52 + 内容边距 24 + 卡片头部约 110 + 底部留白 */
+  .chat-panel {
+    height: calc(100vh - 200px);
+    min-height: 400px;
+  }
+
+  .chat-head {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .back-btn {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--brand-ink);
+    cursor: pointer;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .back-btn:active {
+    background: var(--brand-bg);
+  }
+
+  .avatar-lg {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+  }
+
+  /* 头部操作只留图标，否则挤掉客户名 */
+  .chat-actions :deep(.el-button span) {
+    display: none;
+  }
+
+  .chat-actions {
+    margin-left: auto;
   }
 }
 </style>

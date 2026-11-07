@@ -24,7 +24,29 @@
         </div>
       </template>
 
-      <el-table :data="recentCases" v-loading="loading" style="width: 100%">
+      <!-- 手机：表格 6 列在 375px 上必然挤压，改为卡片列表 -->
+      <div v-if="isMobile" class="case-cards" v-loading="loading">
+        <div
+          v-for="row in recentCases"
+          :key="row.id"
+          class="case-card"
+          @click="go(`/client/cases/${row.id}`)"
+        >
+          <div class="cc-top">
+            <span class="case-no">{{ row.case_no }}</span>
+            <el-tag :type="statusMeta[row.status]?.type" effect="light" size="small">
+              {{ statusMeta[row.status]?.label || row.status }}
+            </el-tag>
+          </div>
+          <div class="cc-title">{{ row.title }}</div>
+          <div class="cc-foot">
+            <span>{{ row.case_cause || '—' }}</span>
+            <span>{{ formatTime(row.created_at) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <el-table v-else :data="recentCases" v-loading="loading" style="width: 100%">
         <el-table-column prop="case_no" label="案号" width="150">
           <template #default="{ row }">
             <span class="case-no">{{ row.case_no }}</span>
@@ -82,10 +104,12 @@ import { listMyBills } from '@/api/billing'
 import { getMyUnreadCount as getNotifyUnread } from '@/api/notifications'
 import { getMyUnreadCount as getMessageUnread } from '@/api/messages'
 import { useUserStore } from '@/stores/user'
+import { useBreakpoint } from '@/utils/useBreakpoint'
 import StatCards from '@/components/StatCards.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
+const { isMobile } = useBreakpoint()
 
 const loading = ref(false)
 const cases = ref([])
@@ -330,12 +354,103 @@ onMounted(load)
   }
 }
 
-@media (max-width: 720px) {
-  .hero {
-    padding: 20px 22px;
+/* ---------- 手机端 ---------- */
+.case-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.case-card {
+  padding: 12px 14px;
+  border: 1px solid var(--brand-line);
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.case-card:active {
+  background: var(--brand-bg);
+}
+
+.cc-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cc-title {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--brand-ink);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cc-foot {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--brand-muted);
+}
+
+@media (max-width: 768px) {
+  .home {
+    gap: 12px;
   }
+
+  .hero {
+    padding: 18px 18px;
+    border-radius: 12px;
+    align-items: flex-start;
+  }
+
+  .hero-greet {
+    font-size: 18px;
+    letter-spacing: 0;
+  }
+
+  .hero-sub {
+    margin-top: 6px;
+    font-size: 12px;
+  }
+
+  .hero-badge {
+    padding: 4px 10px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+
+  /* 两列竖排图标：比单列省一半纵向空间，也不至于挤成一团 */
   .shortcuts {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .sc {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .sc-desc {
+    display: none;
+  }
+
+  .block-head {
+    font-size: 14px;
   }
 }
 </style>

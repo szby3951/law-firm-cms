@@ -1,38 +1,52 @@
 <template>
   <el-container class="app-layout">
-    <!-- ============ 侧边栏：深色商务 ============ -->
-    <el-aside :width="collapsed ? '64px' : '220px'" class="aside">
-      <div class="brand-area" @click="$router.push(homePath)">
-        <BrandLogo :compact="collapsed" small />
-      </div>
-
-      <el-scrollbar class="menu-scroll">
-        <el-menu
-          :default-active="activePath"
-          :collapse="collapsed"
-          :collapse-transition="false"
-          router
-          class="menu"
-        >
-          <el-menu-item v-for="m in menus" :key="m.path" :index="m.path">
-            <el-icon><component :is="m.icon" /></el-icon>
-            <template #title>{{ m.label }}</template>
-          </el-menu-item>
-        </el-menu>
-      </el-scrollbar>
-
-      <div class="aside-foot" @click="collapsed = !collapsed">
-        <el-icon><component :is="collapsed ? 'Expand' : 'Fold'" /></el-icon>
-        <span v-if="!collapsed">收起导航</span>
-      </div>
+    <!-- ============ 桌面/平板：常驻侧边栏 ============ -->
+    <el-aside v-if="!isMobile" :width="navCollapsed ? '64px' : '220px'" class="aside">
+      <SideNav
+        :menus="menus"
+        :active-path="activePath"
+        :home-path="homePath"
+        :collapsed="navCollapsed"
+        show-collapse
+        @toggle="collapsed = !collapsed"
+      />
     </el-aside>
+
+    <!-- ============ 手机：侧边栏收进抽屉，由顶栏汉堡唤起 ============ -->
+    <el-drawer
+      v-model="drawerOpen"
+      class="nav-drawer"
+      direction="ltr"
+      size="252px"
+      :with-header="false"
+      :show-close="false"
+    >
+      <SideNav
+        :menus="menus"
+        :active-path="activePath"
+        :home-path="homePath"
+        @select="drawerOpen = false"
+      />
+    </el-drawer>
 
     <!-- ============ 右侧：顶栏 + 内容 ============ -->
     <el-container class="right">
-      <el-header class="header" height="60px">
+      <el-header class="header" :height="isMobile ? '52px' : '60px'">
         <div class="header-left">
-          <div class="page-title">{{ pageTitle }}</div>
-          <div class="page-sub">{{ pageSub }}</div>
+          <button
+            v-if="isMobile"
+            type="button"
+            class="nav-toggle"
+            aria-label="打开导航菜单"
+            @click="drawerOpen = true"
+          >
+            <el-icon :size="20"><Menu /></el-icon>
+          </button>
+
+          <div class="head-text">
+            <div class="page-title">{{ pageTitle }}</div>
+            <div v-if="!isMobile" class="page-sub">{{ pageSub }}</div>
+          </div>
         </div>
 
         <div class="header-right">
@@ -41,11 +55,11 @@
           <el-dropdown trigger="click" @command="onCommand">
             <div class="user-chip">
               <div class="avatar">{{ avatarText }}</div>
-              <div class="meta">
+              <div v-if="!isMobile" class="meta">
                 <div class="name">{{ userStore.realName }}</div>
                 <div class="role">{{ roleLabel }}</div>
               </div>
-              <el-icon class="caret"><ArrowDown /></el-icon>
+              <el-icon v-if="!isMobile" class="caret"><ArrowDown /></el-icon>
             </div>
             <template #dropdown>
               <el-dropdown-menu>
@@ -73,13 +87,14 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import BrandLogo from '@/components/BrandLogo.vue'
+import SideNav from '@/components/SideNav.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
 import AiAssistantLauncher from '@/components/AiAssistantLauncher.vue'
 import { useUserStore } from '@/stores/user'
+import { useBreakpoint } from '@/utils/useBreakpoint'
 
 const props = defineProps({
   menus: { type: Array, required: true }, // [{ path, label, icon }]
@@ -90,7 +105,17 @@ const props = defineProps({
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const { isMobile, isTablet } = useBreakpoint()
+
+// 桌面端手动折叠；平板（769–1024）自动折叠为图标条，给内容让宽度
 const collapsed = ref(false)
+const navCollapsed = computed(() => collapsed.value || isTablet.value)
+
+// 手机抽屉：跳转后自动收起，避免遮住内容
+const drawerOpen = ref(false)
+watch(() => route.path, () => {
+  drawerOpen.value = false
+})
 
 // 取前缀最长的菜单项：进入详情页（如 /client/cases/12）时仍能高亮父级菜单
 const activePath = computed(() => {
@@ -128,77 +153,10 @@ async function onCommand(cmd) {
   height: 100%;
 }
 
-/* ---------- 侧边栏 ---------- */
+/* ---------- 侧边栏容器（内容样式在 SideNav 内） ---------- */
 .aside {
-  background: linear-gradient(180deg, var(--brand-navy) 0%, var(--brand-navy-deep) 100%);
-  display: flex;
-  flex-direction: column;
-  transition: width 0.2s ease;
   overflow: hidden;
-}
-
-.brand-area {
-  height: 64px;
-  display: flex;
-  align-items: center;
-  padding: 0 13px;
-  cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  flex-shrink: 0;
-}
-
-.menu-scroll {
-  flex: 1;
-}
-
-.menu {
-  border-right: none;
-  background: transparent;
-  padding: 12px 8px;
-  --el-menu-text-color: rgba(255, 255, 255, 0.62);
-  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.06);
-  --el-menu-active-color: var(--brand-gold-light);
-  --el-menu-item-height: 46px;
-}
-
-.menu :deep(.el-menu-item) {
-  border-radius: 8px;
-  margin-bottom: 4px;
-  font-size: 14px;
-}
-
-.menu :deep(.el-menu-item.is-active) {
-  background: linear-gradient(90deg, rgba(201, 165, 92, 0.18), rgba(201, 165, 92, 0.04));
-  font-weight: 500;
-  position: relative;
-}
-
-.menu :deep(.el-menu-item.is-active)::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--brand-gold);
-}
-
-.aside-foot {
-  height: 46px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 22px;
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 13px;
-  cursor: pointer;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-  flex-shrink: 0;
-}
-
-.aside-foot:hover {
-  color: var(--brand-gold-light);
+  transition: width 0.2s ease;
 }
 
 /* ---------- 顶栏 ---------- */
@@ -215,6 +173,17 @@ async function onCommand(cmd) {
   padding: 0 24px;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.head-text {
+  min-width: 0;
+}
+
 .page-title {
   font-size: 16px;
   font-weight: 600;
@@ -228,10 +197,31 @@ async function onCommand(cmd) {
   margin-top: 2px;
 }
 
+.nav-toggle {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--brand-ink);
+  cursor: pointer;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nav-toggle:active {
+  background: var(--brand-bg);
+}
+
 .header-right {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .user-chip {
@@ -299,5 +289,34 @@ async function onCommand(cmd) {
 .main {
   background: var(--brand-bg);
   padding: 20px 24px;
+}
+
+/* ---------- 手机端收边距 ---------- */
+@media (max-width: 768px) {
+  .header {
+    padding: 0 10px 0 6px;
+  }
+
+  .page-title {
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .user-chip {
+    padding: 4px;
+  }
+
+  .avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+
+  .main {
+    /* 底部留白：避免 AI 悬浮球压住页面最后一个元素 */
+    padding: 12px 12px 72px;
+  }
 }
 </style>

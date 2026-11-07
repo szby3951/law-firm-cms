@@ -490,4 +490,74 @@ loadNotices()
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- 手机端 ---------- */
+@media (max-width: 768px) {
+  .home {
+    gap: 12px;
+  }
+
+  .welcome-card {
+    padding: 18px;
+    border-radius: 12px;
+    align-items: flex-start;
+  }
+
+  .welcome-text h2 {
+    font-size: 18px;
+    letter-spacing: 0;
+  }
+
+  .welcome-text p {
+    font-size: 12px;
+  }
+
+  .welcome-badge {
+    padding: 4px 10px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+
+  /* 待办一行放不下「时间+类型+标题+案号」，改成两行：上行时间与类型，下行标题 */
+  .todo-item {
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    padding: 10px 12px;
+  }
+
+  .todo-time {
+    width: auto;
+  }
+
+  .todo-title {
+    order: 3;
+    flex: 1 0 100%;
+    white-space: normal;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .todo-case {
+    display: none;
+  }
+
+  .notice-rel {
+    display: none;
+  }
+
+  .notice-title {
+    white-space: normal;
+    line-height: 1.4;
+  }
+
+  .todo-body,
+  .notice-body {
+    max-height: none;
+  }
+}
 </style>

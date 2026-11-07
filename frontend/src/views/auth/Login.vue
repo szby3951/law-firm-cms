@@ -426,4 +426,38 @@ async function onSubmit() {
     width: 100%;
   }
 }
+
+/* 手机端：卡片撑满宽度，压缩纵向间距，避免键盘弹起后按钮被顶出屏幕 */
+@media (max-width: 768px) {
+  .form-side {
+    padding: 24px 18px;
+    justify-content: flex-start;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .form-card {
+    width: 100%;
+    max-width: 420px;
+    margin: auto;
+  }
+
+  .form-card h1 {
+    font-size: 22px;
+  }
+
+  .sub {
+    margin-bottom: 24px;
+  }
+
+  /* 底部版权行英文名较长，窄屏允许换行，否则会横向溢出被裁 */
+  .form-foot {
+    margin-top: 20px;
+    font-size: 10px;
+    line-height: 1.6;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
 </style>

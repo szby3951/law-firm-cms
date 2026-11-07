@@ -579,4 +579,42 @@ onBeforeUnmount(() => clearInterval(pollTimer))
     padding: 16px 14px 10px;
   }
 }
+
+/* ---------- 手机端 ---------- */
+@media (max-width: 768px) {
+  .summary {
+    padding: 16px;
+    border-radius: 12px;
+    gap: 12px;
+  }
+
+  .summary-title {
+    font-size: 15px;
+    letter-spacing: 0;
+  }
+
+  .summary-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .summary-actions {
+    width: 100%;
+  }
+
+  .summary-actions .el-button {
+    flex: 1;
+    margin-left: 0;
+  }
+
+  /* 高度按视口算：顶栏 52 + 内容边距 24 + 摘要卡约 130 */
+  .chat-body {
+    height: calc(100vh - 232px);
+    min-height: 380px;
+  }
+
+  .chat-stream {
+    padding: 12px 10px 8px;
+  }
+}
 </style>

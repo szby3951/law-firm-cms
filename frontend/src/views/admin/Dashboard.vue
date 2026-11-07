@@ -1297,4 +1297,48 @@ onMounted(load)
     flex-direction: column;
   }
 }
+
+/* ---------- 手机端 ---------- */
+@media (max-width: 768px) {
+  .hero {
+    padding: 16px 14px 14px;
+    border-radius: 12px;
+  }
+
+  .hero-metrics {
+    margin-top: 14px;
+    padding-top: 12px;
+    row-gap: 12px;
+  }
+
+  .hero-metric {
+    padding-left: 12px;
+  }
+
+  .panel {
+    padding: 12px 12px 10px;
+    border-radius: 12px;
+  }
+
+  /* 图表在窄屏上降低高度，否则一屏看不到内容 */
+  .chart-trend {
+    height: 200px;
+  }
+
+  .chart-cause {
+    height: 210px;
+  }
+
+  .chart-rank {
+    height: 200px;
+  }
+
+  .chart-donut {
+    height: 170px;
+  }
+
+  .alert-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 </style>
