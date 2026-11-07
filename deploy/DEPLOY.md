@@ -10,6 +10,7 @@
 |---|---|
 | `【本地】` | 你自己的 Windows，Git Bash（或 Windows Terminal 里的 Git Bash） |
 | `【服务器】` | WinTerm SSH 上去的 Ubuntu，root 身份（`sudo -i` 之后） |
+| `【网页】` | 浏览器里操作 GitHub（建仓库、加 Deploy Key） |
 
 ---
 
@@ -25,7 +26,10 @@
 
 ---
 
-## 1. 【本地】打包要上传的东西
+## 1. 【本地】代码上传与数据准备
+
+**代码走 GitHub，数据不走 GitHub。** 数据库 dump 含全部客户业务数据、向量快照 43 MB，
+两者都不能进仓库；`.gitignore` 已把它们挡在外面。
 
 ### 1.1 构建前端
 
@@ -35,8 +39,27 @@ npm run build
 ```
 
 产出 `dist/`，约 3.8 MB / 126 个文件。**不要在服务器上构建**，vite 峰值要 1 GB 内存，会把 2G 机器打爆。
+仓库里已包含 `dist`（`frontend/.gitignore` 特意把 `dist` 注释掉了），构建完直接提交即可。
 
-### 1.2 导出数据库
+### 1.2 推送到 GitHub
+
+先在 GitHub 网页建一个**私有仓库**（Private），名字如 `law-firm-cms`。
+**不要勾选** Add a README / Add .gitignore / Choose a license——都会和本地已有的冲突。
+
+```bash
+cd /d/law-firm-cms
+git remote add origin https://github.com/<你的用户名>/law-firm-cms.git
+git push -u origin main
+```
+
+首次推送会弹窗登录 GitHub。推完在网页上核对两件事：
+
+- 能看到 `backend/`、`frontend/`、`deploy/`、`db/`
+- **看不到** `.env`、`backend/uploads/`、`.snap/`
+
+> 必须是 Private 仓库。这是律所客户系统，源码含完整表结构与业务逻辑，公开等于把系统交出去。
+
+### 1.3 导出数据库
 
 ```bash
 cd /d/law-firm-cms
@@ -50,7 +73,7 @@ cd /d/law-firm-cms
 
 > ⚠️ **不要在生产执行 `db/schema.sql`**，它开头会 `DROP TABLE` 掉全部 25 张表。
 
-### 1.3 导出向量快照（如果还没有）
+### 1.4 导出向量快照（如果还没有）
 
 ```bash
 cd /d/law-firm-cms
@@ -59,34 +82,19 @@ bash deploy/vector-snapshot.sh export .snap
 
 已有 `.snap/law_kb-20261107-171114.snapshot`（43 MB）可跳过。**换了 embedding 模型或重建过法条才需要重导。**
 
-### 1.4 打包源码
+### 1.5 传数据文件（scp，不走 git）
 
 ```bash
 cd /d/law-firm-cms
-tar -czf .snap/law-firm-src.tar.gz \
-  --exclude='.venv' --exclude='__pycache__' --exclude='*.pyc' \
-  --exclude='uploads' --exclude='.env' --exclude='.pytest_cache' \
-  backend deploy db
+scp .snap/law_firm.sql .snap/law_kb-*.snapshot root@<SERVER_IP>:/tmp/
+scp -r backend/uploads root@<SERVER_IP>:/tmp/
 ```
 
-约 1 MB。排除了 `.venv`（1.5 GB，服务器上重装）、`uploads`（单独传）、`.env`（服务器上重写）。
-
-### 1.5 上传
-
-```bash
-cd /d/law-firm-cms
-scp .snap/law-firm-src.tar.gz .snap/law_firm.sql .snap/law_kb-*.snapshot \
-    root@<SERVER_IP>:/tmp/
-
-scp -r frontend/dist    root@<SERVER_IP>:/tmp/
-scp -r backend/uploads  root@<SERVER_IP>:/tmp/
-```
-
-合计约 52 MB。上传完可以核对：
+约 45 MB。核对：
 
 ```bash
 # 【服务器】
-ls -lh /tmp/*.tar.gz /tmp/*.sql /tmp/*.snapshot && du -sh /tmp/dist /tmp/uploads
+ls -lh /tmp/*.sql /tmp/*.snapshot && du -sh /tmp/uploads
 ```
 
 ---
@@ -113,7 +121,7 @@ useradd -r -m -d /home/lawfirm -s /bin/bash lawfirm
 ### 2.2 主机调优（swap + MySQL 参数）
 
 ```bash
-# 打包还没解开的话，先用第 3 步解包，再回来跑这个
+# 代码还没 clone 下来，先做完第 3 章，再回来跑这个
 bash /opt/law-firm-cms/deploy/host-setup.sh            # 先预览
 bash /opt/law-firm-cms/deploy/host-setup.sh --apply    # 确认后执行
 systemctl restart mysql
@@ -163,16 +171,61 @@ sleep 3 && curl -s http://127.0.0.1:6333/ | grep -o '"version":"[^"]*"'
 
 ---
 
-## 3. 【服务器】部署代码与依赖
+## 3. 【服务器】拉代码与装依赖
+
+### 3.1 配置只读部署密钥
+
+私有仓库不能匿名 clone。用 Deploy Key——只读、不会像 PAT 那样过期：
 
 ```bash
-mkdir -p /opt/law-firm-cms
-tar -xzf /tmp/law-firm-src.tar.gz -C /opt/law-firm-cms
-chown -R lawfirm:lawfirm /opt/law-firm-cms
-ls /opt/law-firm-cms      # 应看到 backend  deploy  db
+ssh-keygen -t ed25519 -C "law-firm-server" -f /root/.ssh/github_deploy -N ""
+cat /root/.ssh/github_deploy.pub
 ```
 
-### 3.1 装依赖
+复制输出的公钥，到 GitHub 仓库页 → **Settings → Deploy keys → Add deploy key**，
+粘贴后保存，**Allow write access 不要勾**（服务器只需要拉取，不需要推送权限）。
+
+然后让 SSH 走 443 端口，国内 22 端口经常被挡：
+
+```bash
+cat >> /root/.ssh/config <<'EOF'
+Host github.com
+  HostName ssh.github.com
+  Port 443
+  User git
+  IdentityFile /root/.ssh/github_deploy
+  StrictHostKeyChecking accept-new
+EOF
+chmod 600 /root/.ssh/config
+ssh -T git@github.com      # 出现 "successfully authenticated" 就通了
+```
+
+### 3.2 clone 仓库
+
+```bash
+cd /opt
+git clone git@github.com:<你的用户名>/law-firm-cms.git law-firm-cms
+chown -R lawfirm:lawfirm /opt/law-firm-cms
+ls /opt/law-firm-cms      # 应看到 backend  deploy  db  frontend
+```
+
+> 如果 `/opt/law-firm-cms` 已经存在（前面 mkdir 过），先 `rm -rf` 或换个目录——git 不接受非空目标。
+
+拉不动（`ssh -T` 超时、`Connection reset`、`port 443: Connection refused`）就走退路：
+
+```bash
+# 【本地】打包（约 1 MB）
+cd /d/law-firm-cms && tar -czf .snap/src.tar.gz \
+  --exclude='.venv' --exclude='__pycache__' --exclude='uploads' --exclude='.env' \
+  backend deploy db frontend/dist
+scp .snap/src.tar.gz root@<SERVER_IP>:/tmp/
+
+# 【服务器】解压到同一位置，后续步骤完全不变
+mkdir -p /opt/law-firm-cms && tar -xzf /tmp/src.tar.gz -C /opt/law-firm-cms
+chown -R lawfirm:lawfirm /opt/law-firm-cms
+```
+
+### 3.3 装依赖
 
 ```bash
 cd /opt/law-firm-cms/backend
@@ -186,7 +239,7 @@ sudo -u lawfirm .venv/bin/pip install -r requirements-prod.txt \
 
 > 项目没有 `[build-system]`，`pip install -e .` 会失败，所以只装依赖、不装项目本身——`app` 包靠 systemd 的 `WorkingDirectory` 直接 import。
 
-### 3.2 目录与权限
+### 3.4 目录与权限
 
 ```bash
 mkdir -p /var/lib/law-firm/uploads /var/www/law-firm
@@ -374,21 +427,41 @@ sudo -u lawfirm .venv/bin/python scripts/create_users.py --reset
 
 ```bash
 # 【本地】
-cd /d/law-firm-cms/frontend && npm run build
-cd /d/law-firm-cms && tar -czf .snap/backend.tar.gz --exclude='.venv' --exclude='__pycache__' --exclude='uploads' backend
-scp .snap/backend.tar.gz root@<SERVER_IP>:/tmp/
-scp -r frontend/dist root@<SERVER_IP>:/tmp/dist-new
+cd /d/law-firm-cms/frontend && npm run build     # 改过前端才需要
+cd /d/law-firm-cms
+git add -A
+git commit -m "feat: 这次改了什么"
+git push
 
 # 【服务器】
-systemctl stop law-firm-api
-tar -xzf /tmp/backend.tar.gz -C /opt/law-firm-cms
-rm -rf /var/www/law-firm/dist && mv /tmp/dist-new /var/www/law-firm/dist
+cd /opt/law-firm-cms
+git pull
 chown -R lawfirm:lawfirm /opt/law-firm-cms
+rsync -a --delete frontend/dist/ /var/www/law-firm/dist/
 chown -R www-data:www-data /var/www/law-firm/dist
-systemctl start law-firm-api && systemctl reload nginx
+systemctl restart law-firm-api
 ```
 
-依赖有变动时（`pyproject.toml` 改了），本地重新 `uv export` 生成 `requirements-prod.txt` 一起传，服务器重跑 `pip install -r`。
+`dist` 在仓库里，所以 `git pull` 之后同步一次到 nginx 目录即可，不用再 scp。
+
+依赖有变动时（`pyproject.toml` 改了），本地重新生成清单并提交：
+
+```bash
+cd /d/law-firm-cms/backend
+uv export --frozen --no-dev --no-hashes --no-emit-project -o requirements-prod.txt
+git add requirements-prod.txt && git commit -m "chore: 更新依赖" && git push
+
+# 服务器
+cd /opt/law-firm-cms && git pull
+sudo -u lawfirm backend/.venv/bin/pip install -r backend/requirements-prod.txt \
+  -i https://pypi.tuna.tsinghua.edu.cn/simple
+systemctl restart law-firm-api
+```
+
+数据变了（灌了新法条、导入了客户数据）才需要重新传 `law_firm.sql` / 新向量快照，日常改代码不需要。
+
+> 仓库里带 `dist` 的代价：每次构建产生 100 多个新文件名，仓库会随发版缓慢膨胀。
+> 发版频率高了（比如每月多次）再考虑 CI 构建 + Release 产物，现在这样最省事。
 
 ---
 
