@@ -8,10 +8,11 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-# dist 故意提交进仓库：生产服务器是 2C2G，跑不动 vite 构建
-# （构建峰值约 1GB 内存，会和 MySQL/Qdrant 抢内存导致 OOM）。
-# 部署时直接使用仓库里的构建产物，发版流程 = 本地 npm run build + git push + 服务器 git pull。
-# dist
+# 构建产物不进版本库：vite 每次构建会生成 123 个带内容哈希的新文件名，
+# 入库会让仓库每次发版增长约 3.8MB，且 commit 噪音极大。
+# 发版走 deploy/release-frontend.sh（本地构建 → tar 整目录覆盖服务器）。
+# 生产服务器是 2C2G，跑不动 vite 构建（峰值约 1GB，会和 MySQL/Qdrant 抢内存）。
+dist
 dist-ssr
 *.local
 

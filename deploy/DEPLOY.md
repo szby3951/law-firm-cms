@@ -31,15 +31,19 @@
 **代码走 GitHub，数据不走 GitHub。** 数据库 dump 含全部客户业务数据、向量快照 43 MB，
 两者都不能进仓库；`.gitignore` 已把它们挡在外面。
 
-### 1.1 构建前端
+### 1.1 前端构建产物
+
+`dist/` **不进 GitHub**，由 `deploy/release-frontend.sh` 单独上传（原因见第 10 章）。
+
+首次部署时先本地构建一次，产物留在本地，第 7 章会把它推上去：
 
 ```bash
 cd /d/law-firm-cms/frontend
 npm run build
 ```
 
-产出 `dist/`，约 3.8 MB / 126 个文件。**不要在服务器上构建**，vite 峰值要 1 GB 内存，会把 2G 机器打爆。
-仓库里已包含 `dist`（`frontend/.gitignore` 特意把 `dist` 注释掉了），构建完直接提交即可。
+产出 `dist/`，约 3.8 MB / 126 个文件。**绝不要在服务器上构建**，vite 峰值要 1 GB 内存，
+会把 2G 机器打爆（MySQL 或 Qdrant 会被 OOM killer 挑中）。
 
 ### 1.2 推送到 GitHub
 
@@ -242,13 +246,14 @@ sudo -u lawfirm .venv/bin/pip install -r requirements-prod.txt \
 ### 3.4 目录与权限
 
 ```bash
-mkdir -p /var/lib/law-firm/uploads /var/www/law-firm
+mkdir -p /var/lib/law-firm/uploads /var/www/law-firm/dist
 chown -R lawfirm:lawfirm /var/lib/law-firm/uploads
 cp -a /tmp/uploads/. /var/lib/law-firm/uploads/     # 历史附件 1.4 MB
-cp -a /tmp/dist /var/www/law-firm/dist              # 前端产物
-chown -R www-data:www-data /var/www/law-firm/dist   # nginx 读
-ls /var/www/law-firm/dist/index.html && echo OK
+ls /var/lib/law-firm/uploads | wc -l
 ```
+
+`/var/www/law-firm/dist` 先留空，前端产物在第 7 章用发版脚本推上去（那时 nginx 已就位，
+脚本末尾的 `nginx -t && reload` 才有意义）。
 
 ---
 
@@ -367,7 +372,19 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1/           # 200
 curl -s http://127.0.0.1/api/dicts -o /dev/null -w "%{http_code}\n"  # 401（未登录，正常）
 ```
 
-### 7.1 防火墙
+### 7.1 上传前端产物（回【本地】执行）
+
+`dist` 不在仓库里，用发版脚本推上去——它做的事和以后每次发版完全一样：
+
+```bash
+# 【本地】
+cd /d/law-firm-cms
+bash deploy/release-frontend.sh root@<SERVER_IP>
+```
+
+脚本会构建、上传、原子切换目录、改属主、`nginx -t` 并 reload。看到 `首页 HTTP 200` 就成功了。
+
+### 7.2 防火墙
 
 ```bash
 ufw allow 22/tcp && ufw allow 80/tcp && ufw --force enable
@@ -425,43 +442,98 @@ sudo -u lawfirm .venv/bin/python scripts/create_users.py --reset
 
 ## 10. 以后怎么发版
 
+先分清这次改了什么，只发改动的部分，别整个系统重来一遍。
+
+### 10.1 只改前端（页面、样式、交互）
+
+```bash
+# 【本地】一条命令
+cd /d/law-firm-cms
+bash deploy/release-frontend.sh root@<SERVER_IP>
+```
+
+脚本依次做：`npm run build` → tar 打包 → 上传解到 `dist.new` → `mv` 原子替换 →
+`chown www-data` → `nginx -t` → `reload` → 请求首页确认 200。
+
+**不需要碰 git，也不重启后端。** 前端是纯静态文件，nginx 直接读磁盘，替换完立即生效。
+
+### 10.2 只改后端（接口、业务逻辑）
+
 ```bash
 # 【本地】
-cd /d/law-firm-cms/frontend && npm run build     # 改过前端才需要
 cd /d/law-firm-cms
-git add -A
-git commit -m "feat: 这次改了什么"
-git push
+git add -A && git commit -m "feat: 这次改了什么" && git push
 
 # 【服务器】
 cd /opt/law-firm-cms
 git pull
-chown -R lawfirm:lawfirm /opt/law-firm-cms
-rsync -a --delete frontend/dist/ /var/www/law-firm/dist/
-chown -R www-data:www-data /var/www/law-firm/dist
 systemctl restart law-firm-api
 ```
 
-`dist` 在仓库里，所以 `git pull` 之后同步一次到 nginx 目录即可，不用再 scp。
+前端没动就不用重传 `dist`。后端重启约 3~5 秒（加载字典缓存），期间请求会 502。
 
-依赖有变动时（`pyproject.toml` 改了），本地重新生成清单并提交：
+### 10.3 前后端都改
+
+两条都跑：先 10.2 再 10.1。顺序其实无所谓，因为前端只要接口路径没变就能和后端各自独立更新。
+但如果这次改了接口路径或字段，**先发后端再发前端**——否则用户会拿到"新页面调旧接口"的报错。
+
+### 10.4 改了依赖
+
+`pyproject.toml` 变了才需要，日常改业务代码不用：
 
 ```bash
+# 【本地】
 cd /d/law-firm-cms/backend
 uv export --frozen --no-dev --no-hashes --no-emit-project -o requirements-prod.txt
-git add requirements-prod.txt && git commit -m "chore: 更新依赖" && git push
+cd .. && git add backend/requirements-prod.txt && git commit -m "chore: 更新依赖" && git push
 
-# 服务器
+# 【服务器】
 cd /opt/law-firm-cms && git pull
 sudo -u lawfirm backend/.venv/bin/pip install -r backend/requirements-prod.txt \
   -i https://pypi.tuna.tsinghua.edu.cn/simple
 systemctl restart law-firm-api
 ```
 
-数据变了（灌了新法条、导入了客户数据）才需要重新传 `law_firm.sql` / 新向量快照，日常改代码不需要。
+### 10.5 改了数据库表结构
 
-> 仓库里带 `dist` 的代价：每次构建产生 100 多个新文件名，仓库会随发版缓慢膨胀。
-> 发版频率高了（比如每月多次）再考虑 CI 构建 + Release 产物，现在这样最省事。
+本地改完模型后，在本地库执行对应的 `ALTER TABLE`，验证没问题再同步到生产：
+
+```bash
+# 【本地】只导结构，不带数据
+/d/mysql/bin/mysqldump.exe -u root -p --no-data --skip-comments law_firm > .snap/schema-only.sql
+
+# 【服务器】看一眼差异再决定怎么改，不要直接喂进去
+mysql law_firm < /tmp/schema-only.sql     # ⚠️ 含 DROP TABLE，执行前务必确认内容
+```
+
+**最稳的做法是手写 `ALTER TABLE` 到生产上执行**，别用全量结构覆盖——`mysqldump --no-data`
+默认带 `DROP TABLE IF EXISTS`，跑错一次数据全没。改完记得同步备份。
+
+### 10.6 为什么 dist 不进 GitHub
+
+vite 每次构建会把 123 个 assets 文件名全部换掉（`AiAssistant-B0huO7OO.js` → `AiAssistant-CrrE_qre.js`），
+一次 commit 就是 126 个文件增删、仓库永久 +3.8 MB。发 20 次版，仓库胖 76 MB 且无法回收。
+
+拆开之后职责清楚：**代码走 git，构建产物走发版脚本**。代价是服务器 `git pull` 之后没有前端产物，
+必须跑一次 `release-frontend.sh`——所以第 7 章首次部署也要跑它。
+
+### 10.7 回滚
+
+脚本每次会保留上一版到 `dist.bak`，出问题一条命令退回去：
+
+```bash
+ssh root@<SERVER_IP> "rm -rf /var/www/law-firm/dist && mv /var/www/law-firm/dist.bak /var/www/law-firm/dist && systemctl reload nginx"
+```
+
+后端回滚：
+
+```bash
+cd /opt/law-firm-cms && git log --oneline | head -5
+git checkout <上一个提交的哈希>
+systemctl restart law-firm-api
+```
+
+数据变了（灌了新法条、导入了客户数据）才需要重新传 `law_firm.sql` / 新向量快照，日常改代码不需要。
 
 ---
 

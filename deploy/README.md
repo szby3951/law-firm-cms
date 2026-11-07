@@ -5,11 +5,15 @@
 | 文件 | 作用 |
 |---|---|
 | `DEPLOY.md` | 部署与数据迁移手册（Ubuntu + IP/HTTP + Docker Qdrant） |
+| `release-frontend.sh` | **前端发版**：本地构建 → 上传 → 原子切换 → reload nginx（在本地跑） |
 | `host-setup.sh` | 主机调优：2G swap + swappiness、MySQL 调参、日志轮转。默认只打印，`--apply` 才执行 |
 | `law-firm-api.service` | 后端 systemd 单元（**单 worker**，原因见文件内注释） |
 | `nginx.conf` | HTTPS 版反代配置（有域名后使用） |
 | `nginx-http.conf` | HTTP 版反代配置（**无域名临时用**，登录密码明文传输） |
 | `vector-snapshot.sh` | 向量库导出 / 导入 / 校验，免去服务器重建向量 |
+
+`frontend/dist` 不入库：vite 每次构建会换掉全部 123 个 assets 文件名，入库等于每次发版给仓库永久加 3.8 MB。
+发版只能走 `release-frontend.sh`，服务器上也不要 `npm run build`（2C2G 峰值 1 GB 会 OOM）。
 
 依赖清单用 `uv export` 从 `uv.lock` 生成，见 `backend/requirements-prod.txt`（144 行，版本锁定）。
 重新生成：

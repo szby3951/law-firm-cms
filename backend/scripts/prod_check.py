@@ -36,8 +36,24 @@ from app.core.security import verify_password
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENV = Path(__file__).resolve().parents[1] / ".env"
-DEFAULT_DIST = ROOT / "frontend" / "dist"
+# 构建产物不入库（见 deploy/DEPLOY.md 10.6）：
+# 本地开发时在仓库内 frontend/dist，服务器上由 release-frontend.sh 推到 nginx 目录。
+LOCAL_DIST = ROOT / "frontend" / "dist"
+PROD_DIST = Path("/var/www/law-firm/dist")
+DEFAULT_DIST = LOCAL_DIST
 SCHEMA_SQL = ROOT / "db" / "schema.sql"
+
+
+def resolve_dist(explicit: Path | None) -> Path:
+    """确定 dist 目录：命令行 > 仓库内 > nginx 目录。"""
+    if explicit is not None:
+        return explicit
+    if (LOCAL_DIST / "index.html").is_file():
+        return LOCAL_DIST
+    if (PROD_DIST / "index.html").is_file():
+        return PROD_DIST
+    return LOCAL_DIST
+
 
 # 常见弱口令：管理员账号命中任意一个都算不合规
 WEAK_PASSWORDS = [
@@ -364,7 +380,10 @@ def check_frontend(dist: Path) -> None:
     section("前端构建产物")
     index = dist / "index.html"
     if not index.is_file():
-        fail("dist/index.html 不存在", "先在服务器执行 npm run build")
+        fail(
+            "dist/index.html 不存在",
+            "本地执行 bash deploy/release-frontend.sh <SERVER> 上传构建产物",
+        )
         return
     ok("dist/index.html", str(index))
 
@@ -384,8 +403,13 @@ def check_frontend(dist: Path) -> None:
     else:
         fail("dist 可能是旧构建", "未找到 /dicts 调用，重新执行 npm run build")
 
+    # mtime 比较只在「dist 与源码同仓库」时有意义（本地开发）。
+    # 服务器上 dist 来自 release-frontend.sh 上传、源码来自 git checkout，
+    # 两者时间基准不同，比较必然误报，直接跳过。
     src = ROOT / "frontend" / "src"
-    if src.is_dir():
+    if dist.resolve() != LOCAL_DIST.resolve():
+        ok("dist 位于 nginx 目录", "由发布脚本上传，跳过 mtime 比对")
+    elif src.is_dir():
         newest = max(
             (p.stat().st_mtime for p in src.rglob("*") if p.is_file()), default=0
         )
@@ -539,7 +563,9 @@ async def probe_ai(s: Settings) -> None:
 async def main() -> int:
     parser = argparse.ArgumentParser(description="上线前自检（只读）")
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV)
-    parser.add_argument("--dist", type=Path, default=DEFAULT_DIST)
+    parser.add_argument(
+        "--dist", type=Path, default=None, help="构建产物目录，默认自动探测"
+    )
     parser.add_argument("--skip-db", action="store_true", help="跳过数据库巡检")
     parser.add_argument(
         "--probe-ai", action="store_true", help="探测 Qdrant 与向量化服务"
@@ -565,7 +591,7 @@ async def main() -> int:
     check_timezone()
     check_python()
     check_host(s)
-    check_frontend(args.dist)
+    check_frontend(resolve_dist(args.dist))
     check_schema_sql()
 
     if not args.skip_db:
