@@ -1,0 +1,138 @@
+/* AI 回答正文（Markdown）排版。
+ *
+ * 法律问答与「我的业务」两个入口都渲染 Markdown，正文样式必须一致——用户
+ * 在同一套界面里看两种回答，字号、行距、标题左边那条金线换了都会显得像两个
+ * 产品。所以从 AiChatWindow 抽到这里全局引入，组件里只保留各自的布局样式。
+ *
+ * 不用 scoped：v-html 生成的内容不属于组件模板，scoped 的 :deep() 在 CSS 文件
+ * 里写不出来，直接全局更直白。当前只有这两个组件使用 .markdown-body。
+ */
+
+.markdown-body {
+  word-break: break-word;
+}
+
+.markdown-body p {
+  margin: 0 0 8px;
+}
+
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body h2,
+.markdown-body h3 {
+  font-size: 15px;
+  margin: 14px 0 8px;
+  padding-left: 9px;
+  border-left: 3px solid var(--brand-gold);
+  color: var(--brand-ink);
+}
+
+.markdown-body h4,
+.markdown-body h5 {
+  font-size: 14px;
+  margin: 12px 0 6px;
+  color: var(--brand-ink);
+}
+
+.markdown-body h2:first-child,
+.markdown-body h3:first-child,
+.markdown-body h4:first-child {
+  margin-top: 0;
+}
+
+.markdown-body strong {
+  color: var(--brand-ink);
+  font-weight: 600;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+}
+
+.markdown-body li {
+  margin-bottom: 3px;
+}
+
+.markdown-body blockquote {
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: rgba(29, 43, 71, 0.04);
+  border-left: 3px solid var(--brand-navy);
+  border-radius: 0 6px 6px 0;
+  color: var(--brand-ink);
+}
+
+.markdown-body code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(29, 43, 71, 0.06);
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 12.5px;
+}
+
+.markdown-body pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f5f6f9;
+  overflow-x: auto;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: none;
+}
+
+.markdown-body table {
+  width: 100%;
+  margin: 8px 0;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 6px 10px;
+  border: 1px solid var(--brand-line);
+  text-align: left;
+}
+
+.markdown-body th {
+  background: #f5f6f9;
+  color: var(--brand-ink);
+  font-weight: 600;
+}
+
+.markdown-body hr {
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid var(--brand-line);
+}
+
+/* 引用锚点：不可选中，点击即展开条文 */
+.markdown-body .cite {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  margin: 0 2px;
+  padding: 0 3px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--brand-gold-deep);
+  background: rgba(201, 165, 92, 0.16);
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  vertical-align: 1px;
+}
+
+.markdown-body .cite:hover {
+  background: var(--brand-gold);
+  color: #fff;
+}

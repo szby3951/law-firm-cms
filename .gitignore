@@ -1,0 +1,63 @@
+# ============================================================================
+# 律所客户智能管理系统 —— 仓库忽略规则
+#
+# 三条红线，任何一条破了都不要 push：
+#   1. .env / 密钥：仓库一旦公开或协作者泄露，等于把数据库和百炼账号送人；
+#   2. uploads/：当事人身份证、合同、证据扫描件，属于客户隐私；
+#   3. .snap/：数据库全量 dump 与向量快照，含全部业务数据。
+# ============================================================================
+
+# ---------- 密钥与环境变量 ----------
+.env
+.env.*
+!.env.example
+!.env.prod.example
+
+# ---------- 数据与备份（不进仓库）----------
+.snap/
+*.snapshot
+*.dump
+backend/uploads/
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+*.egg-info/
+.eggs/
+build/
+
+# ---------- Node ----------
+node_modules/
+.vite/
+npm-debug.log*
+yarn-error.log*
+
+# ---------- 日志 ----------
+*.log
+logs/
+
+# ---------- 测试与工具缓存 ----------
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# ---------- 编辑器 / 系统 ----------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- 会话与临时文件 ----------
+.workbuddy/
+*.tmp
+tmp/
+_temp/
+~$*

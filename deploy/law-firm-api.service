@@ -1,0 +1,65 @@
+# ============================================================================
+# 律所客户智能管理系统 —— systemd 服务单元
+#
+# 放置位置：/etc/systemd/system/law-firm-api.service
+# 启用：
+#   systemctl daemon-reload
+#   systemctl enable --now law-firm-api
+#   systemctl status law-firm-api
+#
+# 为什么故意不写 --workers：
+#   字典缓存（dict_cache）与「数据库 AI 配置覆盖」都是**进程内状态**。
+#   多 worker 时，管理员在系统设置里改字典/改 AI 配置只会刷新处理那次请求的
+#   那个进程，其余 worker 仍持旧缓存，表现为「下拉候选时新时旧」；同时
+#   APScheduler 会在每个 worker 各起一份，提醒扫描重复执行。
+#   单 worker 足够支撑本系统的并发量（连接池 10+20，MySQL max_connections 151）。
+#   若将来必须多 worker，需要先把缓存改成跨进程共享、调度器拆成独立进程。
+#
+# 另外：服务只监听 127.0.0.1，对外由 Nginx 反代，端口不要改成 0.0.0.0。
+# ============================================================================
+
+[Unit]
+Description=Law Firm CMS API (FastAPI + Uvicorn)
+Documentation=file:///opt/law-firm-cms/deploy/nginx.conf
+After=network-online.target mysql.service
+Wants=network-online.target
+# MySQL 与本服务同机时，确保数据库先起来再拉起应用
+Requires=mysql.service
+
+[Service]
+Type=simple
+User=lawfirm
+Group=lawfirm
+WorkingDirectory=/opt/law-firm-cms/backend
+
+# 生产配置：与 config.py 的 env_file 指向同一个文件
+EnvironmentFile=/opt/law-firm-cms/backend/.env
+# 时区必须显式指定：代码里有大量 date.today()/datetime.now()，
+# 服务器若为 UTC，「今日待办 / 未来 7 天 / 到期预警」会整体偏移 8 小时。
+Environment=TZ=Asia/Shanghai
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+ExecStart=/opt/law-firm-cms/backend/.venv/bin/python -m uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --proxy-headers \
+    --forwarded-allow-ips=127.0.0.1 \
+    --log-level info
+
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+# ---- 基础加固 ----
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+# 上传目录需要写权限（路径需与 .env 的 UPLOAD_DIR 一致）
+ReadWritePaths=/var/lib/law-firm/uploads
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

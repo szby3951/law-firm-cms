@@ -1,0 +1,78 @@
+/* ============================================================
+   全局样式 & 设计令牌（Design Tokens）
+   风格定位：商务高级 · 深墨蓝 + 哑光金（律所经典配色）
+   ============================================================ */
+
+:root {
+  /* 品牌色 */
+  --brand-navy: #14213d;          /* 主色·深墨蓝 */
+  --brand-navy-deep: #0d1730;     /* 深色阶 */
+  --brand-navy-soft: #1d2b47;     /* 浅色阶 */
+  --brand-gold: #c9a55c;          /* 哑光金 */
+  --brand-gold-deep: #a5813d;     /* 金·深 */
+  --brand-gold-light: #e8c98a;    /* 金·浅 */
+
+  /* 中性色 */
+  --brand-ink: #22304d;           /* 标题墨色 */
+  --brand-text: #2a3347;          /* 正文 */
+  --brand-muted: #8a93a6;         /* 辅助说明 */
+  --brand-line: #e8eaf0;          /* 分隔线 */
+  --brand-bg: #f4f5f8;            /* 页面底色 */
+
+  /* Element Plus 主色统一为商务墨蓝 */
+  --el-color-primary: #1d2b47;
+  --el-color-primary-light-3: #44547a;
+  --el-color-primary-light-5: #76849f;
+  --el-color-primary-light-7: #aab3c4;
+  --el-color-primary-light-8: #c6ccd8;
+  --el-color-primary-light-9: #e2e5eb;
+  --el-color-primary-dark-2: #14213d;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family:
+    'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', 'Hiragino Sans GB', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--brand-bg);
+  color: var(--brand-text);
+  font-size: 14px;
+}
+
+/* 细滚动条（工作台长时间使用场景） */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c9cdd8;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #aab0c0;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Element Plus 细节微调：更克制的圆角与字重 */
+.el-button {
+  font-weight: 500;
+}
+
+.el-card {
+  border: 1px solid var(--brand-line);
+}

@@ -1,0 +1,23 @@
+# 统一使用 LF：shell 脚本若带 CRLF，在 Linux 上会报
+#   bash: ./host-setup.sh: /bin/bash^M: bad interpreter
+# 这类错误排查起来很浪费时间，直接在仓库层面锁死。
+* text=auto eol=lf
+
+*.sh      text eol=lf
+*.py      text eol=lf
+*.conf    text eol=lf
+*.service text eol=lf
+*.vue     text eol=lf
+*.js      text eol=lf
+*.json    text eol=lf
+*.md      text eol=lf
+*.sql     text eol=lf
+
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.woff    binary
+*.woff2   binary
+*.pdf     binary
