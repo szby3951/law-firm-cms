@@ -357,8 +357,16 @@ def check_host(s: Settings) -> None:
     total_mb = values.get("MemTotal", 0) // 1024
     swap_mb = values.get("SwapTotal", 0) // 1024
 
-    if total_mb < 1800:
+    # 标称 2GiB 的机型（阿里云/腾讯云 2C2G）经内核与硬件保留后，
+    # /proc/meminfo 的 MemTotal 实测常为 1.6~1.9GB，按 1800MB 卡会把合格机器误判。
+    # 判定依据改为「物理内存 + swap 能否扛住峰值」：1400MB 以上且有 >=1GB swap
+    # 即为可用；低于 1400MB 或没有 swap 兜底才判失败。
+    if total_mb < 1400:
         fail("内存过小", f"{total_mb}MB；最低 2GB，建议 4GB")
+    elif total_mb < 1800 and swap_mb < 1024:
+        fail("内存不足且无 swap", f"{total_mb}MB 物理内存 + {swap_mb}MB swap，峰值必 OOM")
+    elif total_mb < 1800:
+        ok("内存总量", f"{total_mb}MB（2G 机型内核预留后正常，由 {swap_mb}MB swap 兜底）")
     else:
         ok("内存总量", f"{total_mb}MB")
 
